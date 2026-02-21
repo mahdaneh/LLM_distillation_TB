@@ -31,43 +31,50 @@ class JsonlDataset(Dataset):
     def __getitem__(self, idx):
         item = self.data[idx]
 
-        # --------------------
-        # Ground truth
-        # --------------------
-        prompt_ids, _ = self.tokenize_input(item["question"])
-        response_ids, _ = self.tokenize_input(item["ground_truth"])
+        try:
+            prompt_ids, _ = self.tokenize_input(item["question"])
+            response_ids, _ = self.tokenize_input(item["ground_truth"])
+            # Skip empty tensors
+            if prompt_ids.ndim == 0 or response_ids.ndim == 0:
+                return None
+            if len(prompt_ids) == 0 or len(response_ids) == 0:
+                return None
 
-        input_ids_gt = torch.cat([prompt_ids, response_ids], dim=0)
-        attention_mask_gt = torch.ones_like(input_ids_gt)
-        labels_gt = input_ids_gt.clone()
-        labels_gt[:len(prompt_ids)] = -100  # mask prompt
 
-        # --------------------
-        # Imitation / teacher response
-        # --------------------
-        teacher_response_ids, _ = self.tokenize_input(item["output_answer"])
-        input_ids_imi = torch.cat([prompt_ids, teacher_response_ids], dim=0)
-        attention_mask_imi = torch.ones_like(input_ids_imi)
-        labels_imi = input_ids_imi.clone()
-        labels_imi[:len(prompt_ids)] = -100  # mask prompt
+            input_ids_gt = torch.cat([prompt_ids, response_ids], dim=0)
+            attention_mask_gt = torch.ones_like(input_ids_gt)
+            labels_gt = input_ids_gt.clone()
+            labels_gt[:len(prompt_ids)] = -100  # mask prompt
 
-        teacher_top_logits = torch.tensor(item["top_5_logits"], dtype=torch.float)  # [seq_len, top_k]
-        teacher_top_indices = torch.tensor(item["top_5_indices"], dtype=torch.long)  # [seq_len, top_k]
 
-        return {
-            "input_ids_gt": input_ids_gt,
-            "attention_mask_gt": attention_mask_gt,
-            "labels_gt": labels_gt,
-            "input_ids_imi": input_ids_imi,
-            "attention_mask_imi": attention_mask_imi,
-            "labels_imi": labels_imi,
-            "teacher_top_logits": teacher_top_logits,
-            "teacher_top_indices": teacher_top_indices,
-            "question":item["question"],
-            "gt":item["ground_truth"],
-            "teacher_response":item["output_answer"]
+            teacher_response_ids, _ = self.tokenize_input(item["output_answer"])
+            input_ids_imi = torch.cat([prompt_ids, teacher_response_ids], dim=0)
+            attention_mask_imi = torch.ones_like(input_ids_imi)
+            labels_imi = input_ids_imi.clone()
+            labels_imi[:len(prompt_ids)] = -100  # mask prompt
 
-        }
+            teacher_top_logits = torch.tensor(item["top_5_logits"], dtype=torch.float)  # [seq_len, top_k]
+            teacher_top_indices = torch.tensor(item["top_5_indices"], dtype=torch.long)  # [seq_len, top_k]
+            if teacher_top_logits.ndim < 2 or teacher_top_indices.ndim < 2:
+                return None
+
+            return {
+                "input_ids_gt": input_ids_gt,
+                "attention_mask_gt": attention_mask_gt,
+                "labels_gt": labels_gt,
+                "input_ids_imi": input_ids_imi,
+                "attention_mask_imi": attention_mask_imi,
+                "labels_imi": labels_imi,
+                "teacher_top_logits": teacher_top_logits,
+                "teacher_top_indices": teacher_top_indices,
+                "question":item["question"],
+                "gt":item["ground_truth"],
+                "teacher_response":item["output_answer"]
+
+            }
+        except Exception:
+            # If anything unexpected happens, skip sample
+            return None
 
 
 
@@ -76,6 +83,28 @@ class JsonlDataset(Dataset):
 
 from torch.nn.utils.rnn import pad_sequence
 def collate_fn(batch):
+    batch = [b for b in batch if b is not None]
+
+    # If entire batch is invalid,skip
+    if len(batch) == 0:
+        return None
+
+    # #  remove samples with zero-length tensors
+    # valid_batch = []
+    # for b in batch:
+    #     if (
+    #             b["input_ids_gt"].numel() == 0 or
+    #             b["input_ids_imi"].numel() == 0 or
+    #             b["teacher_top_logits"].numel() == 0 or
+    #             b["teacher_top_indices"].numel() == 0
+    #     ):
+    #         continue
+    #     valid_batch.append(b)
+    #
+    # if len(valid_batch) == 0:
+    #     return None
+    #
+    # batch = valid_batch
     # Ground truth
     input_ids_gt = [b['input_ids_gt'] for b in batch]
     attention_mask_gt = [b['attention_mask_gt'] for b in batch]

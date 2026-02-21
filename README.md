@@ -2,7 +2,7 @@
 
 We use `llama-2-7b.Q4_K_M` as the teacher model to generate offline responses for the given questions.
 
-The generated outputs are stored in the following JSONL files that could be used for training and evaluating the student model:
+The generated offline responses are stored in the following JSONL files that could be used for training and evaluating the student model:
 
 - `fiqa_test_llama-2-7b.Q4_K_M.jsonl`
 - `Fiq_train_llama_27b.Q4_K_M.jsonl`
@@ -20,6 +20,8 @@ Each entry in these files contains:
 ---
 
 ## Teacher Model Performance
+
+As BERTScore compares contextual embeddings of tokens using a pretrained transformer, it is more suitable for evaluating LLM, to assess accuracy and relatedness of the generated response (w.r.t gt response) 
 
 | Model                  | BERTScore F1 | BERTScore Precision | BERTScore Recall |
 |------------------------|--------------|---------------------|------------------|
